@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Driver Drowsiness Detection</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <!-- Chart.js Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: url('{{ url_for("static", filename="bg.jpg") }}') no-repeat center center fixed;
+            background-size: cover;
+            color: #f2f2f2;
+            font-family: "Segoe UI", sans-serif;
+        }
+
+        .container {
+            margin-top: 30px;
+        }
+
+        .video-container {
+            border: 5px solid #007bff;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(0, 123, 255, 0.5);
+        }
+
+        .stats {
+            margin-top: 20px;
+            font-size: 1.2rem;
+        }
+
+        h1 {
+            margin-bottom: 30px;
+            animation: fadeInDown 1s;
+        }
+
+        @keyframes fadeInDown {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .chart-container {
+            margin-top: 30px;
+        }
+
+        /* Logout button styles */
+        .logout-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            text-decoration: none;
+            color: #f2f2f2;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .logout-btn:hover {
+            color: #ff6b6b;
+        }
+
+        .logout-icon {
+            width: 24px;
+            height: 24px;
+        }
+
+        /* Control buttons styles */
+        .control-btn {
+            margin: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Logout Button -->
+    <a href="{{ url_for('logout') }}" class="logout-btn">
+        <!-- Logout Icon (inline SVG) -->
+        <svg class="logout-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V8"></path>
+        </svg>
+        <span>Logout</span>
+    </a>
+
+    <div class="container text-center">
+        <h1>Driver Drowsiness Detection</h1>
+        <div class="video-container mx-auto">
+            <img src="{{ url_for('video_feed') }}" class="img-fluid" id="videoStream" />
+        </div>
+        <div class="stats mt-3">
+            <p id="statsInfo">Blinks: 0 | Duration: 0s | Fatigue Level: N/A</p>
+        </div>
+        <!-- Control Buttons -->
+        <div class="d-flex justify-content-center my-3">
+            <button id="stopBtn" class="btn btn-danger control-btn">Stop Detection</button>
+            <button id="startBtn" class="btn btn-success control-btn">Start Detection</button>
+        </div>
+        <div class="chart-container">
+            <canvas id="earChart" width="600" height="300"></canvas>
+        </div>
+    </div>
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Initialize Chart.js for EAR values
+        const ctx = document.getElementById("earChart").getContext("2d");
+        const earChart = new Chart(ctx, {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "EAR Values",
+                    data: [],
+                    borderColor: "rgba(75, 192, 192, 1)",
+                    backgroundColor: "rgba(75, 192, 192, 0.2)",
+                    fill: true,
+                }]
+            },
+            options: {
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: "Samples"
+                        }
+                    },
+                    y: {
+                        min: 0,
+                        max: 0.5,
+                        title: {
+                            display: true,
+                            text: "EAR"
+                        }
+                    }
+                }
+            }
+        });
+
+        // Function to fetch new EAR data from the backend
+        async function updateChart() {
+            try {
+                const response = await fetch("/ear_data");
+                const data = await response.json();
+                const earValues = data.ear_values;
+                const labels = earValues.map((_, index) => index + 1);
+                earChart.data.labels = labels;
+                earChart.data.datasets[0].data = earValues;
+                earChart.update();
+            } catch (error) {
+                console.error("Error fetching EAR data:", error);
+            }
+        }
+
+        // Function to fetch blink count, session duration, and fatigue level
+        async function updateStats() {
+            try {
+                const response = await fetch("/stats");
+                const stats = await response.json();
+                const statsElement = document.getElementById("statsInfo");
+                statsElement.innerText = `Blinks: ${stats.blink_count} | Duration: ${stats.duration}s | Fatigue Level: ${stats.fatigue_level}`;
+                // Update the text color based on fatigue level
+                statsElement.style.color = stats.color;
+            } catch (error) {
+                console.error("Error fetching stats:", error);
+            }
+        }
+
+        // Functions to control detection
+        async function stopDetection() {
+            try {
+                const response = await fetch("/stop_detection", { method: "POST" });
+                const data = await response.json();
+                console.log(data.status);
+            } catch (error) {
+                console.error("Error stopping detection:", error);
+            }
+        }
+
+        async function startDetection() {
+            try {
+                const response = await fetch("/start_detection", { method: "POST" });
+                const data = await response.json();
+                console.log(data.status);
+            } catch (error) {
+                console.error("Error starting detection:", error);
+            }
+        }
+
+        // Add event listeners to control buttons
+        document.getElementById("stopBtn").addEventListener("click", stopDetection);
+        document.getElementById("startBtn").addEventListener("click", startDetection);
+
+        // Update the chart and stats every second
+        setInterval(updateChart, 1000);
+        setInterval(updateStats, 1000);
+    </script>
+</body>
+
+</html>
